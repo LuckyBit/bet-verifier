@@ -10,6 +10,7 @@ are 100% provably fair. The bet verifyer uses external
 3rd-party sources (http://blockchain.info) for verifying
 a bet.
 
+
 Prerequisites
 -------------
 
@@ -20,6 +21,10 @@ No special prerequesites are required:
 
 The bet verifier is a command line script. 
 Access to the command line is therefore required.
+
+The bet verifier makes used of the LuckyBit API.
+See http://luckybit-api-docs.readthedocs.org/ for the API documentation.
+
 
 Usage
 -----
