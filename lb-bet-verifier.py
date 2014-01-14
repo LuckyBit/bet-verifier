@@ -1,4 +1,34 @@
 # vim: ts=3 softtabstop=3 shiftwidth=3 expandtab ai
+###########################################################################################
+#
+# Copyright (C) 2014 LuckyBit Online Games
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a 
+# copy of this software and associated documentation files (the "Software"), 
+# to deal in the Software without restriction, including without limitation 
+# the rights to use, copy, modify, merge, publish, distribute, sublicense, 
+# and/or sell copies of the Software, and to permit persons to whom the 
+# Software is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in 
+# all copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
+# OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+# DEALINGS IN THE SOFTWARE.
+#
+###########################################################################################
+#
+#
+#
+#
+#
+#
+###########################################################################################
 import os
 import sys
 import re
@@ -12,11 +42,14 @@ import random
 import hmac
 from datetime import datetime
 
-
+# version of this script
+VERSION = 0.3
+# base URL for blockchain.info
 BC_BASE_URL = 'https://blockchain.info'
+# base URL for LuckyBit
 LB_BASE_URL = 'http://luckyb.it'
-
-lbGameNames = {
+# LuckyBit games and their addresses
+LB_GAME_NAMES = {
       '1LuckyG4tMMZf64j6ea7JhCz7sDpk6vdcS' : 'green',
       '1LuckyY9fRzcJre7aou7ZhWVXktxjjBb9S' : 'yellow',
       '1LuckyR1fFHEsXYyx5QK4UFzv3PEAepPMK' : 'red'
@@ -421,89 +454,115 @@ def ecdsa_recover(msg,sig):
 ###########################################################################################
 
 
+# converts satoshis to btc
 def satoshisToFloatBtc(amount):
    return float(amount / 1e8)
 
-
+# get commandline argument
 if len(sys.argv) != 2 or not re.match('^[a-zA-Z0-9]{64}$', sys.argv[1]):
    sys.stderr.write("Usage  : python %s <transaction id of the bet(s) to verify\n" % sys.argv[0])
    sys.stderr.write("Example: python %s e9f65033e7d684143b7336429ef82fd5009a7decb72230dfc7d7e82a7e3092f8\n" % sys.argv[0]) 
    sys.stderr.write("Please specify a valid transaction id!\n")
    exit(1)
 
+# set txit to check
 txToCheck = sys.argv[1]
 
+################################
+# Downloads the list of key hashes from LuckyBit.
+# The list contains the hash of the secret key of every day.
+# The hashes can be used to verify that a give bet has been resolved in a fair manner.
+# The list is available at http://luckyb.it/secret-key-hashes.txt
+#
 sys.stdout.write("Downloading list of key hashes .......................... ")
 try:
    url = LB_BASE_URL + '/secret-key-hashes.txt'
    luckyBitKeyHashes = urlopen(LB_BASE_URL + '/secret-key-hashes.txt').readlines()
    sys.stdout.write("OK\n")
-except BaseException as e:
-   # TODO: treat exception properly
-#   sys.stderr.write("Exception! %s\n" % repr(e))
+except URLError as e:
    sys.stdout.write("FAIL\n")
    sys.stderr.write("Failed to retrieve the list of secret key hashes from " + url + "\n") 
    exit(1)
 
+
+#################################
+# Verify the correctness of the list of hashes.
+# Computes the hash of the list (SHA256) and converts this hash to a
+# bitcoin address. We made a single transaction to this address on
+# 2013-09-10 12:31:31, which proves that the list has not been modified
+# since. This code checks that this is correct.
+#
 sys.stdout.write("Verifying list of key hashes ............................ ")
 hashOfHashFile = hashlib.sha256()
 hashOfHashFile.update(''.join(luckyBitKeyHashes))
 addressOfHashFile = privkey_to_address(hashOfHashFile.hexdigest())
-
 try:
    url = BC_BASE_URL + '/rawaddr/' + addressOfHashFile
    addrData = json.load(urlopen(url))
-   txs = addrData['txs']
-   txTime = datetime.utcfromtimestamp(txs[len(txs) - 1]['time'])
-   sys.stdout.write("OK (not modified since %s)\n" % str(txTime))
-except BaseException as e:
-   # TODO: treat exception properly
-#   sys.stderr.write("Exception! %s\n" % repr(e))
+except URLError as e:
    sys.stdout.write("FAIL\n")
    sys.stderr.write("Failed to retrieve address details from " + url + "\n") 
    exit(1)
+if 'txs' in addrData:
+   txs = addrData['txs']
+   txTime = datetime.utcfromtimestamp(txs[len(txs) - 1]['time'])
+   sys.stdout.write("OK (not modified since %s)\n" % str(txTime))
 
 
+#################################
+# Get the data of the transaction to verify from blockchain.info.
+# Get the sender address.
+#
 sys.stdout.write("Getting transaction ..................................... %s\n" % txToCheck)
 try:
    url = BC_BASE_URL + '/rawtx/' + txToCheck
    txData = json.load(urlopen(url))
-   senderAddress = txData['inputs'][0]['prev_out']['addr']
-except BaseException as e:
-   # TODO: treat exception properly
-#   sys.stderr.write("Exception! %s\n" % repr(e))
+except URLError as e:
    sys.stderr.write("Failed to retrieve transaction from " + url + "\n") 
    exit(1)
-
+senderAddress = txData['inputs'][0]['prev_out']['addr']
 sys.stdout.write("Sender address is ....................................... %s" % senderAddress)
 
+
+#################################
+# Each transaction can contain multiple bets towards LuckyBit.
+# Loop over every bet found.
+#
 allOk = True
 for out in txData['out']:
-   if out['addr'] in lbGameNames:
+   if out['addr'] in LB_GAME_NAMES:
       sys.stdout.write("Found a bet for LuckyBit\n")
 
+      # Each bet is identified by the transaction id and its vout (txit:vout).
       betTxidVout = txToCheck + ":" + str(out['n'])      
       sys.stdout.write(" * Bet identifier ....................................... %s\n" %
             betTxidVout)
 
+      # Get bet amount
       sys.stdout.write(" * Checking bet game/amount ............................. %s/%f BTC\n" % 
-            (lbGameNames[out['addr']], satoshisToFloatBtc(out['value'])))
+            (LB_GAME_NAMES[out['addr']], satoshisToFloatBtc(out['value'])))
 
+      # Bets must be 24 hrs old to be verified - if they are younger, the associated secret key hasn't been published yet!
       betTime = datetime.utcfromtimestamp(txData['time'])
       if (datetime.now() - betTime).days == 0:
          sys.stdout.write(" * Warning: bet is too recent, cannot verify! Check again in 24 hours.\n")
          continue
 
+      #################################
+      # Check if the bet itself was valid (not too small or not too big)
+      # For this, get the bet's data from the Luckybit API.
+      # Bet type must be VALID_BET to continue.
+      #
       sys.stdout.write(" * Checking if bet was valid ............................ ")
       betsOfTxData = None
       try:         
          url = LB_BASE_URL + '/api/getbetbytxidvout/' + betTxidVout
          bet = json.load(urlopen(url))[betTxidVout]
-      except BaseException as e:
-         # TODO: treat exception properly URLError
+      except URLError as e:
          sys.stderr.write("Exception! %s\n" % repr(e))
-         pass
-      if bet['type'] == "VALID_BET":
+         allOk = False
+         continue 
+      if 'type' in bet and bet['type'] == "VALID_BET":
          sys.stdout.write("OK\n")
       else:
          sys.stdout.write("FAIL\n")
@@ -511,6 +570,7 @@ for out in txData['out']:
          allOk = False
          continue
 
+      #################################
       sys.stdout.write(" * Retrieving secret key of bet day ..................... ")
       betDateString = betTime.strftime("%Y-%m-%d")
       try:
@@ -529,6 +589,7 @@ for out in txData['out']:
          allOk = False
          continue
 
+      #################################
       hashOfSecretKey = hashlib.sha256()
       hashOfSecretKey.update(secretKey)
       hashOfSecretKey = hashOfSecretKey.hexdigest()
@@ -539,6 +600,7 @@ for out in txData['out']:
          if m:
             hashOfDayFromFile = m.group(1)
 
+      #################################
       sys.stdout.write(" * Verifying secret key using hash ...................... ")
       if hashOfDayFromFile == hashOfSecretKey:
          sys.stdout.write("OK\n")
@@ -548,6 +610,7 @@ for out in txData['out']:
          allOk = False
          continue
 
+      #################################
       sys.stdout.write(" * Computing movement of coin ........................... ")
       luckyString = (txData['hash'] + ':' + str(out['n']) + ':' + secretKey).lower()
       hashOfLuckyString = hashlib.sha256()
@@ -560,17 +623,18 @@ for out in txData['out']:
          luckyMoves += "left," if c == "0" else "right,"
       sys.stdout.write(luckyMoves[:-1] + "\n")
 
+      #################################
       sys.stdout.write(" * Computing obtained multiplier ........................ ")
       betRank = abs(8 - luckyBinaryString.count('1'))
       try:
-         url = LB_BASE_URL + '/api/getgamebyname/' + lbGameNames[out['addr']]
+         url = LB_BASE_URL + '/api/getgamebyname/' + LB_GAME_NAMES[out['addr']]
          gameData = json.load(urlopen(url))
       except BaseException as e:
          # TODO: treat exception properly
          sys.stderr.write("Exception! %s\n" % repr(e))
          pass
-      if gameData and lbGameNames[out['addr']] in gameData:
-         multiplierObtained = gameData[lbGameNames[out['addr']]]['multipliers'][str(betRank)]
+      if gameData and LB_GAME_NAMES[out['addr']] in gameData:
+         multiplierObtained = gameData[LB_GAME_NAMES[out['addr']]]['multipliers'][str(betRank)]
          sys.stdout.write("%f\n" % multiplierObtained)
       else:
          sys.stdout.write("FAIL\n")
@@ -578,10 +642,12 @@ for out in txData['out']:
          allOk = False
          continue
 
+      #################################
       sys.stdout.write(" * Computing payout amount .............................. ")
       payoutAmount = int(out['value'] * multiplierObtained) - 10000
       sys.stdout.write("%f BTC\n" % satoshisToFloatBtc(payoutAmount))
 
+      #################################
       sys.stdout.write(" * Retrieving payout transaction ........................ ")
       payoutTx = bet['txout_id']
       payoutData = None
@@ -597,6 +663,7 @@ for out in txData['out']:
          allOk = False
          continue
 
+      #################################
       sys.stdout.write(" * Checking if payout amount matches computed value ..... ")
       for payout in payoutData['out']:
          if payout['addr'] == senderAddress:
