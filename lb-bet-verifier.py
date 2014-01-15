@@ -458,6 +458,7 @@ prinfInfo("Verifying list of key hashes ............................ ")
 hashOfHashFile = hashlib.sha256()
 hashOfHashFile.update(''.join(luckyBitKeyHashes))
 addressOfHashFile = privkey_to_address(hashOfHashFile.hexdigest())
+addrData = None
 try:
    url = BC_BASE_URL + '/rawaddr/' + addressOfHashFile
    addrData = json.load(urlopen(url))
@@ -465,7 +466,7 @@ except URLError as e:
    prinfInfo("FAIL\n")
    sys.stderr.write("Failed to retrieve address details from " + url + "\n") 
    exit(1)
-if 'txs' in addrData:
+if addrData and 'txs' in addrData:
    txs = addrData['txs']
    txTime = datetime.utcfromtimestamp(txs[len(txs) - 1]['time'])
    prinfInfo("OK (not modified since %s)\n" % str(txTime))
@@ -487,6 +488,26 @@ prinfInfo("Sender address is ....................................... %s\n" % sen
 
 
 #################################
+# Get the time of the bet.
+# Note: on old bets, we first have to get the block.
+#
+betTime = None
+if 'time' in txData:
+   betTime = datetime.utcfromtimestamp(txData['time'])
+elif 'block_height' in txData:
+   try:
+      url = BC_BASE_URL + '/block-height/' + str(txData['block_height']) + '/?format=json'
+      blockData = json.load(urlopen(url))
+   except URLError as e:
+      pass
+   if blockData and 'blocks' in blockData:
+      betTime = datetime.utcfromtimestamp(blockData['blocks'][0]['time'])
+if not betTime:
+   sys.stderr.write("Failed to time of bet " + url + "\n") 
+   exit(1)
+
+
+#################################
 # Each transaction can contain multiple bets towards LuckyBit.
 # Loop over every bet found.
 #
@@ -505,7 +526,6 @@ for out in txData['out']:
             (LB_GAME_NAMES[out['addr']], satoshisToFloatBtc(out['value'])))
 
       # Bets must be 24 hrs old to be verified - if they are younger, the associated secret key hasn't been published yet!
-      betTime = datetime.utcfromtimestamp(txData['time'])
       if (datetime.now() - betTime).days == 0:
          prinfInfo(" * Warning: bet is too recent, cannot verify! Check again in 24 hours.\n")
          continue
@@ -518,6 +538,7 @@ for out in txData['out']:
       #
       prinfInfo(" * Checking if bet was valid ............................ ")
       betsOfTxData = None
+      bet = None
       try:         
          url = LB_BASE_URL + '/api/getbetbytxidvout/' + betTxidVout
          bet = json.load(urlopen(url))[betTxidVout]
@@ -538,6 +559,7 @@ for out in txData['out']:
       #
       prinfInfo(" * Retrieving secret key of bet day ..................... ")
       betDateString = betTime.strftime("%Y-%m-%d")
+      keyData = None
       try:
          url = LB_BASE_URL + '/api/getkeybydate/' + betDateString
          keyData = json.load(urlopen(url))
@@ -603,6 +625,7 @@ for out in txData['out']:
       #
       prinfInfo(" * Computing obtained multiplier ........................ ")
       betRank = abs(8 - luckyBinaryString.count('1'))
+      gameData = None
       try:
          url = LB_BASE_URL + '/api/getgamebyname/' + LB_GAME_NAMES[out['addr']]
          gameData = json.load(urlopen(url))
@@ -649,6 +672,7 @@ for out in txData['out']:
       # payout amount.
       #
       prinfInfo(" * Checking if payout amount matches computed value ..... ")
+      payout = None
       for payout in payoutData['out']:
          if payout['addr'] == senderAddress:
             break
@@ -656,7 +680,7 @@ for out in txData['out']:
          prinfInfo("OK\n")
       else:
          prinfInfo("FAIL\n")
-         sys.stderr.write("Payout transaction not found or payout amount does not match comuted value\n")
+         sys.stderr.write("Payout transaction not found or payout amount does not match computed value\n")
          allOk = False
          continue
       
