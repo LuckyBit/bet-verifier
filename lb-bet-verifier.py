@@ -488,26 +488,6 @@ prinfInfo("Sender address is ....................................... %s\n" % sen
 
 
 #################################
-# Get the time of the bet.
-# Note: on old bets, we first have to get the block.
-#
-betTime = None
-if 'time' in txData:
-   betTime = datetime.utcfromtimestamp(txData['time'])
-elif 'block_height' in txData:
-   try:
-      url = BC_BASE_URL + '/block-height/' + str(txData['block_height']) + '/?format=json'
-      blockData = json.load(urlopen(url))
-   except URLError as e:
-      pass
-   if blockData and 'blocks' in blockData:
-      betTime = datetime.utcfromtimestamp(blockData['blocks'][0]['time'])
-if not betTime:
-   sys.stderr.write("Failed to time of bet " + url + "\n") 
-   exit(1)
-
-
-#################################
 # Each transaction can contain multiple bets towards LuckyBit.
 # Loop over every bet found.
 #
@@ -525,7 +505,27 @@ for out in txData['out']:
       prinfInfo(" * Checking bet game/amount ............................. %s/%f BTC\n" % 
             (LB_GAME_NAMES[out['addr']], satoshisToFloatBtc(out['value'])))
 
+
+      #################################
+      # Get the time of the bet.
       # Bets must be 24 hrs old to be verified - if they are younger, the associated secret key hasn't been published yet!
+      #
+      prinfInfo(" * Getting time of bet .................................. ")
+      betTime = None
+      try:
+         url = LB_BASE_URL + '/api/getbetbytxidvout/' + betTxidVout
+         txDataLb = json.load(urlopen(url))
+      except URLError as e:
+         sys.stderr.write("Failed to retrieve transaction from " + url + "\n") 
+         exit(1)
+      if txDataLb and betTxidVout in txDataLb and 'created_at' in txDataLb[betTxidVout]:
+         betTime = datetime.strptime(txDataLb[betTxidVout]['created_at'], "%Y-%m-%d %H:%M:%S")
+      else:
+         prinfInfo("FAIL\n")
+         sys.stderr.write("Could not get time of bet from " + url + "\n") 
+         allOk = False
+         continue
+      prinfInfo("%s\n" % str(betTime))
       if (datetime.now() - betTime).days == 0:
          prinfInfo(" * Warning: bet is too recent, cannot verify! Check again in 24 hours.\n")
          continue
@@ -546,9 +546,12 @@ for out in txData['out']:
          pass
       if bet and 'type' in bet and bet['type'] == "VALID_BET":
          prinfInfo("OK\n")
+      elif bet and 'type' in bet and bet['type'].startswith("INVALID_BET"):
+         prinfInfo("INVALID, ignoring\n")
+         continue
       else:
          prinfInfo("FAIL\n")
-         sys.stderr.write("Bet was either invalid or failed to retrieve bet from " + url + "\n") 
+         sys.stderr.write("Failed to retrieve bet from " + url + "\n") 
          allOk = False
          continue
 
@@ -566,8 +569,8 @@ for out in txData['out']:
       except URLError as e:
          pass
       if keyData and betDateString in keyData:
-         prinfInfo("OK\n")
          secretKey = keyData[betDateString]
+         prinfInfo("%s\n" % secretKey)
       else:
          prinfInfo("FAIL\n")
          sys.stderr.write("Failed to retrieve secret key from " + url + "\n")
@@ -612,6 +615,7 @@ for out in txData['out']:
       hashOfLuckyString = hashOfLuckyString.hexdigest()
       last2bytesOfLuckyString = hashOfLuckyString[-4:]
       luckyBinaryString = bin(int(last2bytesOfLuckyString, 16))[2:].zfill(16) 
+      #prinfInfo(luckyBinaryString)
       luckyMoves = ""
       for c in luckyBinaryString:
          luckyMoves += "left," if c == "0" else "right,"
@@ -646,7 +650,7 @@ for out in txData['out']:
       # payout = bet * multiplier - 0.00001 (minimum fee)
       #
       prinfInfo(" * Computing payout amount .............................. ")
-      payoutAmount = round(float(out['value']) * multiplierObtained) - 10000
+      payoutAmount = long(float(out['value']) * multiplierObtained) - 10000
       prinfInfo("%f BTC\n" % satoshisToFloatBtc(payoutAmount))
 
 
@@ -681,17 +685,19 @@ for out in txData['out']:
       else:
          prinfInfo("FAIL\n")
          sys.stderr.write("Payout transaction not found or payout amount does not match computed value\n")
+         sys.stderr.write("Payout = %s, computed = %s\n" % (payout['value'], payoutAmount))
          allOk = False
          continue
       
       # At this point we know that this bet has been 100% correct and was provably fair
-      prinfInfo(" * Bet verifyied ........................................ OK")
+      prinfInfo(" * Bet verifyied ........................................ OK\n")
 
 if not allOk:
    if quiet:
       sys.stdout.write("FAIL\n")
    else:
-      prinfInfo("\nProblems detected. Please contact support@luckyb.it\n")
+      prinfInfo("\nProblems detected. Please make sure that internet connectivity is not the cause of the issue.\n")
+      prinfInfo("In doubt, try again. In case there is any other error, please contact support@luckyb.it\n")
    sys.exit(1)
 
 if quiet:
