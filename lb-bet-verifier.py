@@ -636,8 +636,8 @@ for out in txData['out']:
       except URLError as e:
          pass
       if gameData and LB_GAME_NAMES[out['addr']] in gameData:
-         multiplierObtained = gameData[LB_GAME_NAMES[out['addr']]]['multipliers'][str(betRank)]
-         prinfInfo("%f\n" % multiplierObtained)
+         computedMultiplierObtained = gameData[LB_GAME_NAMES[out['addr']]]['multipliers'][str(betRank)]
+         prinfInfo("%f\n" % computedMultiplierObtained)
       else:
          prinfInfo("FAIL\n")
          sys.stderr.write("Failed to retrieve multipliers from " + url + "\n") 
@@ -650,8 +650,8 @@ for out in txData['out']:
       # payout = bet * multiplier - 0.00001 (minimum fee)
       #
       prinfInfo(" * Computing payout amount .............................. ")
-      payoutAmount = long(float(out['value']) * multiplierObtained) - 10000
-      prinfInfo("%f BTC\n" % satoshisToFloatBtc(payoutAmount))
+      computedPayoutAmount = int(round(out['value'] * computedMultiplierObtained)) - 10000
+      prinfInfo("%f BTC\n" % satoshisToFloatBtc(computedPayoutAmount))
 
 
       #################################
@@ -666,7 +666,7 @@ for out in txData['out']:
          prinfInfo(payoutTx + "\n")
       except URLError as e:
          prinfInfo("FAIL\n")
-         sys.stderr.write("Failed to retrieve multipliers from " + url + "\n") 
+         sys.stderr.write("Failed to retrieve payout transaction from " + url + "\n") 
          allOk = False
          continue
 
@@ -680,12 +680,12 @@ for out in txData['out']:
       for payout in payoutData['out']:
          if payout['addr'] == senderAddress:
             break
-      if payout and payout['addr'] == senderAddress and payout['value'] == payoutAmount:
+      if payout and payout['addr'] == senderAddress and payout['value'] >= computedPayoutAmount:  # sometimes, luckybit pays 1 satoshi too much
          prinfInfo("OK\n")
       else:
          prinfInfo("FAIL\n")
          sys.stderr.write("Payout transaction not found or payout amount does not match computed value\n")
-         sys.stderr.write("Payout = %s, computed = %s\n" % (payout['value'], payoutAmount))
+         sys.stderr.write("Payout = %s, computed = %s\n" % (payout['value'], computedPayoutAmount))
          allOk = False
          continue
       
