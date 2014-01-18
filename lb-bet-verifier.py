@@ -680,7 +680,8 @@ for out in txData['out']:
       for payout in payoutData['out']:
          if payout['addr'] == senderAddress:
             break
-      if payout and payout['addr'] == senderAddress and payout['value'] >= computedPayoutAmount:  # sometimes, luckybit pays 1 satoshi too much
+      # compare amount, ignoreing a difference of 1 satoshi which is due to rounding errors
+      if payout and payout['addr'] == senderAddress and abs(payout['value'] - computedPayoutAmount) <= 1:  
          prinfInfo("OK\n")
       else:
          prinfInfo("FAIL\n")
