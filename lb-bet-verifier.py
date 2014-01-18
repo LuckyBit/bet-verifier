@@ -23,10 +23,43 @@
 #
 ###########################################################################################
 #
+# LuckyBit - http://luckyb.it
+#
+# This script is a bet verifier for LuckyBit.
+#
+# The bet verifier allows users to verify that their bets are 100% provably fair. 
+# The bet verifyer uses external 3rd-party sources (http://blockchain.info) for
+# verifying a bet.
+#
+# The latest version of the bet verifier can always be found at
+#
+#   https://github.com/LuckyBit/bet-verifier
 #
 #
+##### Prequisites
+#
+# To run the script, no special prerequesites are required:
+#
+# * python version 2.6-2.7
+# * python-json
+#
+# The bet verifier is a command line script.  Access to the command line is
+# therefore required.
+#
+# The bet verifier makes use of the LuckyBit API.
+# See http://luckybit-api-docs.readthedocs.org/ for the API documentation.
 #
 #
+##### Usage
+#
+# 1. Open a command line terminal.
+# 2. Simply execute the script with a single parameter: the transaction ID of your bet.
+#
+# Example (Windows):
+#   python.exe lb-bet-verifier.py e9f65033e7d684143b7336429ef82fd5009a7decb72230dfc7d7e82a7e3092f8
+#
+# Example (Linux/Mac):
+#   python lb-bet-verifier.py e9f65033e7d684143b7336429ef82fd5009a7decb72230dfc7d7e82a7e3092f8
 #
 ###########################################################################################
 import os
