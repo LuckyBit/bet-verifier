@@ -76,7 +76,7 @@ import hmac
 from datetime import datetime
 
 # version of this script
-VERSION = "0.3"
+VERSION = "0.4"
 # base URL for blockchain.info
 BC_BASE_URL = 'https://blockchain.info'
 # base URL for LuckyBit
