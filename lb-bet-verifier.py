@@ -432,13 +432,13 @@ def prinfInfo(string):
 # check number of command line arguments
 if len(sys.argv) != 2 and len(sys.argv) != 3:
    usage()
-   exit(1)
+   sys.exit(1)
 
 # check that one of them is a transaction id
 if (not re.match('^[a-zA-Z0-9]{64}$', sys.argv[1])) and ((len(sys.argv) == 3) and (not re.match('^[a-zA-Z0-9]{64}$', sys.argv[2]))):
    usage()
    sys.stderr.write("Error: please specify a valid transaction id.\n")
-   exit(1)
+   sys.exit(1)
 
 # set txid to check
 if len(sys.argv) == 2:
@@ -452,7 +452,7 @@ if len(sys.argv) == 3:
    if (sys.argv[1] == '-q') and (sys.argv[2] == '-q'):
       usage()
       sys.stderr.write("Error: invalid parameter.\n")
-      exit(1)
+      sys.exit(1)
    else:
       quiet = True
 
@@ -477,7 +477,7 @@ try:
 except URLError as e:
    prinfInfo("FAIL\n")
    sys.stderr.write("Failed to retrieve the list of secret key hashes from " + url + "\n") 
-   exit(1)
+   sys.exit(1)
 
 
 #################################
@@ -498,7 +498,7 @@ try:
 except URLError as e:
    prinfInfo("FAIL\n")
    sys.stderr.write("Failed to retrieve address details from " + url + "\n") 
-   exit(1)
+   sys.exit(1)
 if addrData and 'txs' in addrData:
    txs = addrData['txs']
    txTime = datetime.utcfromtimestamp(txs[len(txs) - 1]['time'])
@@ -515,7 +515,7 @@ try:
    txData = json.load(urlopen(url))
 except URLError as e:
    sys.stderr.write("Failed to retrieve transaction from " + url + "\n") 
-   exit(1)
+   sys.exit(1)
 senderAddress = txData['inputs'][0]['prev_out']['addr']
 prinfInfo("Sender address is ....................................... %s\n" % senderAddress)
 
@@ -550,7 +550,7 @@ for out in txData['out']:
          txDataLb = json.load(urlopen(url))
       except URLError as e:
          sys.stderr.write("Failed to retrieve transaction from " + url + "\n") 
-         exit(1)
+         sys.exit(1)
       if txDataLb and betTxidVout in txDataLb and 'created_at' in txDataLb[betTxidVout]:
          betTime = datetime.strptime(txDataLb[betTxidVout]['created_at'], "%Y-%m-%d %H:%M:%S")
       else:
