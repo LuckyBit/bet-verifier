@@ -68,7 +68,7 @@ import re
 import random
 import time
 import json
-from urllib2 import urlopen, URLError
+from urllib2 import urlopen, URLError, HTTPError, Request
 import hashlib
 import base64
 import random
@@ -472,11 +472,16 @@ prinfInfo("*********************************************************************
 prinfInfo("Downloading list of key hashes .......................... ")
 try:
    url = LB_BASE_URL + '/secret-key-hashes.txt'
-   luckyBitKeyHashes = urlopen(LB_BASE_URL + '/secret-key-hashes.txt').readlines()
+   request = Request(url, headers={'User-Agent' : "LuckyBit bet verifier"})
+   luckyBitKeyHashes = urlopen(request).readlines()
    prinfInfo("OK\n")
+except HTTPError as e:
+   prinfInfo("FAIL\n")
+   sys.stderr.write("Failed to retrieve the list of secret key hashes from " + url + ": " + e.code + "\n") 
+   sys.exit(1)
 except URLError as e:
    prinfInfo("FAIL\n")
-   sys.stderr.write("Failed to retrieve the list of secret key hashes from " + url + "\n") 
+   sys.stderr.write("Failed to retrieve the list of secret key hashes from " + url + ": " + e.args + "\n") 
    sys.exit(1)
 
 
@@ -495,10 +500,15 @@ addrData = None
 try:
    url = BC_BASE_URL + '/rawaddr/' + addressOfHashFile
    addrData = json.load(urlopen(url))
+except HTTPError as e:
+   prinfInfo("FAIL\n")
+   sys.stderr.write("Failed to retrieve address details from " + url + ": " + e.code + "\n") 
+   sys.exit(1)
 except URLError as e:
    prinfInfo("FAIL\n")
-   sys.stderr.write("Failed to retrieve address details from " + url + "\n") 
+   sys.stderr.write("Failed to retrieve address details from " + url + ": " + e.args + "\n") 
    sys.exit(1)
+
 if addrData and 'txs' in addrData:
    txs = addrData['txs']
    txTime = datetime.utcfromtimestamp(txs[len(txs) - 1]['time'])
@@ -513,9 +523,13 @@ prinfInfo("Getting transaction ..................................... %s\n" % txT
 try:
    url = BC_BASE_URL + '/rawtx/' + txToCheck
    txData = json.load(urlopen(url))
-except URLError as e:
-   sys.stderr.write("Failed to retrieve transaction from " + url + "\n") 
+except HTTPError as e:
+   sys.stderr.write("Failed to retrieve transaction from " + url + ": " + e.code + "\n") 
    sys.exit(1)
+except URLError as e:
+   sys.stderr.write("Failed to retrieve transaction from " + url + ": " + e.args + "\n") 
+   sys.exit(1)
+
 senderAddress = txData['inputs'][0]['prev_out']['addr']
 prinfInfo("Sender address is ....................................... %s\n" % senderAddress)
 
@@ -547,10 +561,16 @@ for out in txData['out']:
       betTime = None
       try:
          url = LB_BASE_URL + '/api/getbetbytxidvout/' + betTxidVout
-         txDataLb = json.load(urlopen(url))
-      except URLError as e:
-         sys.stderr.write("Failed to retrieve transaction from " + url + "\n") 
+         request = Request(url, headers={'User-Agent' : "LuckyBit bet verifier"})
+         txDataLb = json.load(urlopen(request))
+      except HTTPError as e:
+         sys.stderr.write("Failed to retrieve transaction from " + url + ": " + e.code + "\n") 
          sys.exit(1)
+      except URLError as e:
+         prinfInfo("FAIL\n")
+         sys.stderr.write("Failed to retrieve transaction from " + url + ": " + e.args + "\n") 
+         sys.exit(1)
+
       if txDataLb and betTxidVout in txDataLb and 'created_at' in txDataLb[betTxidVout]:
          betTime = datetime.strptime(txDataLb[betTxidVout]['created_at'], "%Y-%m-%d %H:%M:%S")
       else:
@@ -574,8 +594,13 @@ for out in txData['out']:
       bet = None
       try:         
          url = LB_BASE_URL + '/api/getbetbytxidvout/' + betTxidVout
-         bet = json.load(urlopen(url))[betTxidVout]
+         request = Request(url, headers={'User-Agent' : "LuckyBit bet verifier"})
+         bet = json.load(urlopen(request))[betTxidVout]
+      except HTTPError as e:
+         reason = e.code
+         pass
       except URLError as e:
+         reason = e.args
          pass
       if bet and 'type' in bet and bet['type'] == "VALID_BET":
          prinfInfo("OK\n")
@@ -584,7 +609,7 @@ for out in txData['out']:
          continue
       else:
          prinfInfo("FAIL\n")
-         sys.stderr.write("Failed to retrieve bet from " + url + "\n") 
+         sys.stderr.write("Failed to retrieve bet from " + url + ": " + reason + "\n") 
          allOk = False
          continue
 
@@ -598,15 +623,20 @@ for out in txData['out']:
       keyData = None
       try:
          url = LB_BASE_URL + '/api/getkeybydate/' + betDateString
-         keyData = json.load(urlopen(url))
+         request = Request(url, headers={'User-Agent' : "LuckyBit bet verifier"})
+         keyData = json.load(urlopen(request))
+      except HTTPError as e:
+         reason = e.code
+         pass
       except URLError as e:
+         reason = e.args
          pass
       if keyData and betDateString in keyData:
          secretKey = keyData[betDateString]
          prinfInfo("%s\n" % secretKey)
       else:
          prinfInfo("FAIL\n")
-         sys.stderr.write("Failed to retrieve secret key from " + url + "\n")
+         sys.stderr.write("Failed to retrieve secret key from " + url + ": " + reason + "\n")
          allOk = False
          continue
 
@@ -665,15 +695,20 @@ for out in txData['out']:
       gameData = None
       try:
          url = LB_BASE_URL + '/api/getgamebyname/' + LB_GAME_NAMES[out['addr']]
-         gameData = json.load(urlopen(url))
+         request = Request(url, headers={'User-Agent' : "LuckyBit bet verifier"})
+         gameData = json.load(urlopen(request))
+      except HTTPError as e:
+         reason = e.code
+         pass
       except URLError as e:
+         reason = e.args
          pass
       if gameData and LB_GAME_NAMES[out['addr']] in gameData:
          computedMultiplierObtained = gameData[LB_GAME_NAMES[out['addr']]]['multipliers'][str(betRank)]
          prinfInfo("%f\n" % computedMultiplierObtained)
       else:
          prinfInfo("FAIL\n")
-         sys.stderr.write("Failed to retrieve multipliers from " + url + "\n") 
+         sys.stderr.write("Failed to retrieve multipliers from " + url + ": " + reason + "\n") 
          allOk = False
          continue
 
@@ -697,9 +732,14 @@ for out in txData['out']:
          url = BC_BASE_URL + '/rawtx/' + payoutTx
          payoutData = json.load(urlopen(url))
          prinfInfo(payoutTx + "\n")
+      except HTTPError as e:
+         prinfInfo("FAIL\n")
+         sys.stderr.write("Failed to retrieve payout transaction from " + url + ": " + e.code + "\n") 
+         allOk = False
+         continue
       except URLError as e:
          prinfInfo("FAIL\n")
-         sys.stderr.write("Failed to retrieve payout transaction from " + url + "\n") 
+         sys.stderr.write("Failed to retrieve payout transaction from " + url + ": " + e.args + "\n") 
          allOk = False
          continue
 
